@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Gender } from "@/types/user";
 
 export const registerUserSchema = z.object({
-    username: z.string().min(4, "아이디는  4자 이사 입력해주세요."),
+    username: z.string().min(4, "아이디는  4자 이상 입력해주세요."),
     password: z.string().min(6, "비밀번호는 6자 이상 입력해주세요."),
     confirmPassword: z.string().min(6, "비밀번호 확인을 입력해주세요."),
     name: z.string().min(2, "이름을 정확히 입력해주세요"),
