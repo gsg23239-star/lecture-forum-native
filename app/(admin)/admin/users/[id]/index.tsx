@@ -1,5 +1,5 @@
 import TextComponent from "@/components/common/text/TextComponent";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -16,17 +16,27 @@ import InputGroup from "@/components/common/input/InputGroup";
 import SelectGroup from "@/components/common/select/SelectGroup";
 import ErrorMessage from "@/components/common/form/ErrorMessage";
 import Button from "@/components/common/button/Button";
+import {
+    AdminUpdateUserInputType,
+    adminUpdateUserSchema,
+} from "@/schemas/user/adminUpdateUserSchema";
+import { useEffect, useState } from "react";
+import LoadingIndicator from "@/components/common/loading/LoadingIndicator";
 
-function AdminUserCreatePage() {
+function AdminUserUpdatePage() {
     const router = useRouter();
+    const { id } = useLocalSearchParams<{ id: string }>();
+    const userId = Number(id);
+    const [isLoading, setIsLoading] = useState(true);
 
     const {
         control,
         handleSubmit,
+        reset,
         setError,
         formState: { errors, isSubmitting },
     } = useForm({
-        resolver: zodResolver(adminCreateUserSchema),
+        resolver: zodResolver(adminUpdateUserSchema),
         mode: "onTouched",
         defaultValues: {
             username: "",
@@ -41,13 +51,53 @@ function AdminUserCreatePage() {
         },
     });
 
-    const onSubmit = async (data: AdminCreateUserInputType) => {
-        try {
-            // phoneNumber에 대해서 처리 => 데이터베이스에서도 varchar
-            // birthdate에 대해서 처리 => 우리가 입력 받을 때 YYYYMMDD 받지만
-            //                          사용자가 입력한 값이 있다면 YYYY-MM-DD 형식으로 보내야 함
+    useEffect(() => {
+        const loadUser = async () => {
+            try {
+                const result = await adminUserApi.getUserById(userId);
 
-            const { phoneNumber, birthdate, ...prevInput } = data;
+                // birthdate : "2026-12-25 14:33:11" -> "20261225"
+                // password : 넣어주면 안됨
+                // phoneNumber도 값이 없으면 빈 스트링을 input에 넣어줘야 함
+
+                let formattedBirthdate = "";
+                if (result.birthdate) {
+                    // 백엔드에서 받아온 정보 중 birthdate를 0번부터 10번 문자까지 자르고
+                    // /-/g 정규식을 통해 - 를 없앰
+                    formattedBirthdate = result.birthdate.substring(0, 10).replace(/-/g, "");
+                }
+                reset({
+                    username: result.username,
+                    password: "",
+                    name: result.name,
+                    nickname: result.nickname,
+                    email: result.email,
+                    phoneNumber: result.phoneNumber || "",
+                    birthdate: formattedBirthdate,
+                    gender: result.gender,
+                    role: result.role,
+                });
+            } catch (error) {
+                console.log(error);
+                if (Platform.OS === "web") {
+                    alert("유저 정보를 불러오는데 실패했습니다.");
+                    router.back();
+                } else {
+                    Alert.alert("오류", "유저 정보를 불러오는데 실패했습니다.", [
+                        { text: "확인", onPress: () => router.back() },
+                    ]);
+                }
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        loadUser().then(() => {});
+    }, [reset, router, userId]);
+
+    const onSubmit = async (data: AdminUpdateUserInputType) => {
+        try {
+            const { phoneNumber, birthdate, password, ...prevInput } = data;
             let formattedBirthdate;
             if (birthdate && birthdate.length === 8) {
                 const year = birthdate.slice(0, 4);
@@ -59,10 +109,11 @@ function AdminUserCreatePage() {
                 formattedBirthdate = undefined;
             }
 
-            await adminUserApi.createUser({
+            await adminUserApi.updateUser(userId, {
                 ...prevInput,
                 phoneNumber: phoneNumber || undefined,
                 birthdate: formattedBirthdate || undefined,
+                password: password || undefined,
             });
 
             if (Platform.OS === "web") {
@@ -99,9 +150,13 @@ function AdminUserCreatePage() {
         }
     };
 
+    if (isLoading) {
+        return <LoadingIndicator fullScreen />;
+    }
+
     return (
         <View className={twMerge("flex-1", "w-full")}>
-            <Title title={"유저 생성"} description={"새로운 관리자 또는 일반 유저를 등록합니다."} />
+            <Title title={"유저 정보 수정"} description={"가입된 유저의 정보를 수정합니다."} />
 
             <ScrollView
                 className={twMerge(
@@ -323,7 +378,7 @@ function AdminUserCreatePage() {
                             color={"primary"}
                             onPress={handleSubmit(onSubmit)}
                             disabled={isSubmitting}>
-                            {isSubmitting ? "등록 중..." : "등록"}
+                            {isSubmitting ? "수정 중..." : "수정"}
                         </Button>
                     </View>
                 </View>
@@ -332,4 +387,4 @@ function AdminUserCreatePage() {
     );
 }
 
-export default AdminUserCreatePage;
+export default AdminUserUpdatePage;
